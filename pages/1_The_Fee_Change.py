@@ -32,7 +32,8 @@ fig.add_annotation(x=u.BREAKEVEN / 2, y=13, text="pays <b>MORE</b><br>under new 
                    showarrow=False, font=dict(color=u.COLORS["more"], size=13))
 fig.add_annotation(x=(u.BREAKEVEN + 800) / 2, y=13, text="pays <b>LESS</b>",
                    showarrow=False, font=dict(color=u.COLORS["less"], size=13))
-fig.update_yaxes(range=[0, 26])
+fig.update_xaxes(title_text="Ticket price (base fare + tax), $")
+fig.update_yaxes(title_text="Fee we pay per order, $", range=[0, 26])
 u.chart(fig, f"The new fee only saves money above a ${u.BREAKEVEN:,.0f} ticket", height=460)
 
 st.divider()

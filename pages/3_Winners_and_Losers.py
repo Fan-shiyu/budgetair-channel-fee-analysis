@@ -44,8 +44,12 @@ colors = [u.COLORS["more"] if v > 0 else u.COLORS["less"] for v in d["value"]]
 fig = go.Figure(go.Bar(
     x=d["value"], y=d["category"], orientation="h", marker_color=colors,
     text=[u.fmt_usd(v, signed=True, cents=True) for v in d["value"]], textposition="outside",
+    cliponaxis=False,
 ))
-fig.update_xaxes(title_text="Change in fee per order, $")
+# headroom on both ends so the outside value labels never clip at the plot edge
+lo, hi = d["value"].min(), d["value"].max()
+pad = max(hi - lo, 1) * 0.18
+fig.update_xaxes(title_text="Change in fee per order, $", range=[min(lo, 0) - pad, hi + pad])
 fig.update_layout(margin=dict(l=150))
 u.chart(fig, f"Average change in fee per order, by {view.lower()} (red = pays more, green = pays less)",
         height=430 if view != "Airline" else 520, xgrid=True, ygrid=False)
@@ -62,7 +66,9 @@ tbl["Avg fee change / order"] = tbl["Avg fee change / order"].map(lambda v: u.fm
 tbl["Total fee change"] = tbl["Total fee change"].map(lambda v: u.fmt_usd(v, signed=True))
 tbl["Avg margin / order"] = tbl["Avg margin / order"].map(lambda v: u.fmt_usd(v, signed=True, cents=True))
 tbl["Orders"] = tbl["Orders"].map(lambda v: f"{v:,.0f}")
-st.dataframe(tbl, hide_index=True, use_container_width=True)
+# st.table (static HTML) instead of st.dataframe (lazy canvas) so it always
+# renders in screenshots; the zone label becomes the row header.
+st.table(tbl.set_index(tbl.columns[0]))
 u.caption(
     "The cheap band is 3 in 5 orders and already runs at about break-even, so the extra fee turns "
     "it loss-making. The expensive band, where we save, is under a third of orders."

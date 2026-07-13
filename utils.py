@@ -278,7 +278,7 @@ def drift_banner():
 pio.templates["budgetair"] = go.layout.Template(layout=dict(
     font=dict(family=CHART_FONT, size=13, color="#374151"),
     title=dict(font=dict(family=CHART_FONT, size=18, color=COLORS["ink"]),
-               x=0, xanchor="left", y=0.95, yanchor="top"),
+               x=0, xanchor="left", y=0.92, yanchor="top"),
     paper_bgcolor="rgba(0,0,0,0)",
     plot_bgcolor="rgba(0,0,0,0)",
     xaxis=dict(showgrid=False, zeroline=False, showline=False, ticks="",
@@ -290,7 +290,9 @@ pio.templates["budgetair"] = go.layout.Template(layout=dict(
     legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="left", x=0,
                 font=dict(size=12, color="#374151")),
     colorway=[COLORS["brand"], COLORS["more"], COLORS["less"], COLORS["neutral"]],
-    margin=dict(t=78, r=24, b=52, l=64),
+    # generous top margin so titles clear the Plotly toolbar; right margin so
+    # outside bar-value labels are never clipped at the plot edge.
+    margin=dict(t=96, r=90, b=52, l=64),
 ))
 
 # Plotly config: keep the toolbar (PNG download) — the user screenshots charts.
@@ -333,6 +335,10 @@ _GLOBAL_CSS = """
   [data-testid="stMetricLabel"], [data-testid="stMetricLabel"] * {
         white-space: normal !important; overflow: visible !important;
         text-overflow: clip !important;}
+  /* equal-height KPI cards: size to the tallest variant, content top-aligned,
+     so every KPI row has one clean bottom edge regardless of delta chips */
+  [data-testid="stVerticalBlock"]:has(> [data-testid="stElementContainer"] > [data-testid="stMetric"]) {
+        min-height: 148px; justify-content: flex-start;}
 </style>
 """
 

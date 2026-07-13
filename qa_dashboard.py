@@ -19,6 +19,7 @@ data exactly like the app does.
 Pass a different base URL as the first argument to QA a deployed app:
     python qa_dashboard.py https://your-app.streamlit.app
 """
+import struct
 import sys
 from pathlib import Path
 
@@ -26,6 +27,8 @@ import numpy as np
 from playwright.sync_api import sync_playwright
 
 import utils as u
+
+VIEWPORT_H = 1000   # base viewport height; long pages are captured taller than this
 
 BASE = sys.argv[1].rstrip("/") if len(sys.argv) > 1 else "http://localhost:8501"
 SHOTS = Path("qa_screenshots")
@@ -86,6 +89,65 @@ def counts(page):
     }
 
 
+def render_ready(page, n_charts):
+    """Wait until the expected Plotly charts exist AND have drawn real content."""
+    if not n_charts:
+        return
+    page.wait_for_function(
+        """n => {
+            const ps = document.querySelectorAll('.js-plotly-plot');
+            return ps.length >= n && [...ps].every(p => {
+                const svg = p.querySelector('svg.main-svg');
+                return svg && svg.querySelectorAll('path, rect, .point, .trace').length > 0;
+            });
+        }""",
+        arg=n_charts, timeout=15000,
+    )
+
+
+def _content_height(page):
+    return page.evaluate(
+        """() => {
+            const sels = ['[data-testid="stMain"]', '[data-testid="stAppViewContainer"]',
+                          'section.main', '[data-testid="stApp"]'];
+            let h = Math.max(document.body.scrollHeight, document.documentElement.scrollHeight);
+            for (const s of sels) { const e = document.querySelector(s); if (e) h = Math.max(h, e.scrollHeight); }
+            return h;
+        }"""
+    )
+
+
+def _scroll_cycle(page):
+    """Force lazy-rendered elements in by scrolling to the bottom and back."""
+    page.evaluate(
+        """() => new Promise(res => {
+            const e = document.querySelector('[data-testid="stMain"]') || document.scrollingElement;
+            e.scrollTo(0, e.scrollHeight); window.scrollTo(0, document.body.scrollHeight);
+            setTimeout(() => { e.scrollTo(0, 0); window.scrollTo(0, 0); res(); }, 350);
+        })"""
+    )
+
+
+def capture_full(page, path, n_charts):
+    """Screenshot the ENTIRE page height (Streamlit scrolls inside an inner
+    container, so plain full_page only grabs one viewport). We grow the viewport
+    to the content height, then capture."""
+    render_ready(page, n_charts)
+    _scroll_cycle(page)
+    page.wait_for_timeout(300)
+    h = int(_content_height(page)) + 60
+    page.set_viewport_size({"width": 1280, "height": h})
+    page.wait_for_timeout(350)
+    render_ready(page, n_charts)
+    page.screenshot(path=str(path), full_page=True)
+    page.set_viewport_size({"width": 1280, "height": VIEWPORT_H})
+
+
+def png_height(path):
+    with open(path, "rb") as f:
+        return struct.unpack(">I", f.read(24)[20:24])[0]
+
+
 def metric_deltas(page):
     """Each KPI's delta text + arrow direction ('up'/'down'/'none')."""
     return page.evaluate(
@@ -131,7 +193,10 @@ def run():
             check(c["charts"] == want["charts"], f"{shot}: {c['charts']} charts (want {want['charts']})")
             check(c["kpis"] == want["kpis"], f"{shot}: {c['kpis']} KPI cards (want {want['kpis']})")
             guard_arrows(page, shot)
-            page.screenshot(path=str(SHOTS / f"{shot}.png"), full_page=True)
+            shot_path = SHOTS / f"{shot}.png"
+            capture_full(page, shot_path, want["charts"])
+            check(png_height(shot_path) > VIEWPORT_H,
+                  f"{shot}: screenshot is full-height ({png_height(shot_path)}px > {VIEWPORT_H})")
             body = page.locator("body").inner_text()
 
             if slug == "":
@@ -153,6 +218,19 @@ def run():
                 page.get_by_text("Full year", exact=True).click(); settle(page)
 
             if slug == "Winners_and_Losers":
+                vis = page.evaluate(
+                    """() => {
+                        const sb = document.querySelector('[data-testid="stSelectbox"]');
+                        const label = sb && sb.querySelector('label');
+                        const val = sb && sb.querySelector('[data-baseweb="select"]');
+                        const shown = e => !!e && e.offsetWidth > 0 && e.offsetHeight > 0
+                                            && e.innerText.trim() !== '';
+                        return { label: shown(label) && label.innerText.includes('View by'),
+                                 value: shown(val) };
+                    }"""
+                )
+                check(vis["label"] and vis["value"],
+                      "'View by:' label and selected value are visible (not an empty box)")
                 for opt in ["Ticket price zone", "Journey type", "Domestic vs International", "Airline"]:
                     page.locator('[data-baseweb="select"]').click()
                     page.get_by_role("option", name=opt).click()
