@@ -5,7 +5,7 @@ import streamlit as st
 
 import utils as u
 
-u.page_setup("Direct Opportunity")
+u.page_setup("Direct Opportunity", "🎯")
 
 MN = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
 
@@ -18,24 +18,24 @@ dec_actual = ds.set_index("month").loc[12, "share_pct"]
 dec_proj = ds.set_index("month").loc[12, "projected"]
 
 # displaced cheap-fare orders / month not recaptured = Aeroprice's monthly cheap-fare loss
-m = u.load_monthly_cheap_by_channel()
-ae = m[m["Channel"] == u.CHANNEL].set_index("month")["orders"]
-displaced = int(round(ae.reindex([7, 8, 9]).mean() - ae.reindex([10, 11, 12]).mean()))
+ae = u.load_monthly_cheap_by_channel()
+ae = ae[ae["Channel"] == u.CHANNEL].set_index("month")["orders"]
+displaced = int(round(ae.reindex(u.SUMMER_MONTHS).mean() - ae.reindex(u.POST_MONTHS).mean()))
 avg_cheap_fee = u.load_stats()["avg_cheap_fee_new"]
 
-st.title("Our own Direct site is the cheapest place to sell a budget fare")
-u.md(
-    f"**Cheap fares are already drifting to Direct — by December it reached "
-    f"{u.fmt_pct(dec_actual)} of cheap-fare orders, ahead of its {u.fmt_pct(dec_proj)} trend. "
-    f"Every budget order we win back there avoids at least ${avg_cheap_fee:,.2f} in partner fees.**"
+u.header(
+    "Our own Direct site is the cheapest place to sell a budget fare",
+    f"**Cheap fares are already drifting to Direct — by December it reached {u.fmt_pct(dec_actual)} "
+    f"of cheap-fare orders, ahead of its {u.fmt_pct(dec_proj)} trend. Every budget order we win back "
+    f"there avoids at least ${avg_cheap_fee:,.2f} in partner fees.**",
 )
 
 c1, c2 = st.columns(2)
-c1.metric("Direct's share of cheap fares in December", u.fmt_pct(dec_actual),
-          delta=f"{u.fmt_pct(dec_actual - dec_proj, signed=True)} vs its own trend",
-          help="Direct's share was already trending up; December ran a little ahead of that trend.")
-c2.metric("Cheap orders/month that vanished from Aeroprice", f"{displaced:,}",
-          help="Summer vs last-quarter drop in Aeroprice cheap-fare orders — demand not recaptured elsewhere.")
+u.kpi(c1, "Direct's share of cheap fares in December", u.fmt_pct(dec_actual),
+      delta=f"{u.fmt_pp(dec_actual - dec_proj)} above trend", delta_color="normal",
+      help="Direct's share was already trending up; December ran a little ahead of that trend.")
+u.kpi(c2, "Cheap orders/month that vanished from Aeroprice", f"{displaced:,}",
+      help="Summer vs last-quarter drop in Aeroprice cheap-fare orders — demand not recaptured elsewhere.")
 
 st.divider()
 
@@ -45,16 +45,12 @@ fig = go.Figure()
 fig.add_trace(go.Scatter(x=xs, y=ds["projected"], name="If the old trend had continued",
                          line=dict(color=u.COLORS["neutral"], width=2, dash="dash")))
 fig.add_trace(go.Scatter(x=xs, y=ds["share_pct"], name="Direct's actual share",
-                         line=dict(color=u.COLORS["less"], width=3), fill="tonexty",
-                         fillcolor="rgba(46,125,50,0.12)"))
+                         line=dict(color=u.COLORS["less"], width=3), mode="lines+markers",
+                         fill="tonexty", fillcolor="rgba(46,125,50,0.12)"))
 fig.add_vline(x=8.5, line_dash="dot", line_color="#444",
               annotation_text="new fee starts", annotation_position="top left")
-fig.update_layout(
-    title="Since the fee change, Direct is winning a bigger slice of budget fares than its trend predicted",
-    yaxis_title="Direct's share of all cheap-fare orders, %", template="simple_white",
-    height=440, legend=dict(orientation="h", y=1.1), margin=dict(t=90),
-)
-st.plotly_chart(fig, use_container_width=True, config=u.PLOTLY_CONFIG)
+fig.update_yaxes(title_text="Direct's share of all cheap-fare orders, %")
+u.chart(fig, "Since the fee change, Direct is winning a bigger slice of budget fares than its trend predicted")
 
 st.divider()
 
@@ -76,7 +72,7 @@ st.subheader("What we recommend")
 u.md(
     f"1. **Stop competing on sub-${u.BREAKEVEN:,.0f} fares inside Aeroprice** — after the new floor, "
     "they are structurally unprofitable there.\n\n"
-    f"2. **Reinvest the ~${abs(u.load_zone_summary().set_index('zone_plain').loc['Pays less','avg_delta']):,.0f}/order "
+    f"2. **Reinvest the ~${abs(u.load_zone_summary().set_index('zone_plain').loc['Pays less','avg_delta']):,.2f}/order "
     "saving on expensive fares** into sharper prices on long-haul, where we now win.\n\n"
     "3. **Make Direct the designated home for budget fares** — every captured order saves at least "
     f"${avg_cheap_fee:,.2f} in fees.\n\n"

@@ -6,10 +6,13 @@ The only literal numbers allowed in this codebase are:
   2. the EXPECTED dict inside verify_numbers(), which is a TEST, not display text.
 No page may hardcode a result figure.
 """
+import re
 from pathlib import Path
 
 import numpy as np
 import pandas as pd
+import plotly.graph_objects as go
+import plotly.io as pio
 import streamlit as st
 
 # --------------------------------------------------------------------------- #
@@ -29,6 +32,9 @@ BREAKEVEN = 262.50          # below this a ticket pays MORE under the new terms
 CAP_MIN = 500.00            # above this the new cap starts to bind
 CHANGE_DATE = "2022-10-01"
 CHANGE_MONTH = 10           # October = first month under the new fee
+PRE_MONTHS = list(range(1, 10))    # Jan-Sep, before the change
+POST_MONTHS = [10, 11, 12]         # Oct-Dec, after the change
+SUMMER_MONTHS = [7, 8, 9]          # Jul-Sep, the pre-change baseline for volume
 
 CHANNEL = "Aeroprice"       # the only channel with contractual fee terms
 CONTROL_CHANNEL = "Google Flights"   # comparable channel with NO fee change
@@ -58,7 +64,12 @@ COLORS = {
     "brand": "#1B6CB0",  # brand blue
     "old": "#7F8C8D",
     "new": "#1B6CB0",
+    "ink": "#262730",    # chart title / dark text
+    "muted": "#6b7280",  # axis / muted text
+    "grid": "#e5e7eb",   # gridlines
 }
+
+CHART_FONT = "Source Sans Pro, sans-serif"   # matches Streamlit's default UI font
 
 
 # --------------------------------------------------------------------------- #
@@ -69,22 +80,27 @@ def fee_curve(ticket, rate, floor, cap):
     return np.clip(np.asarray(ticket, dtype=float) * rate, floor, cap)
 
 
-def fmt_usd(x, signed=False):
-    """Whole-dollar string, e.g. '$131,696' or '+$131,696' / '-$1,768'."""
+def fmt_usd(x, signed=False, cents=False):
+    """Dollar string. Whole dollars by default ('+$131,696'); cents=True for small
+    per-order amounts ('+$2.85') where whole-dollar rounding would distort."""
     x = float(x)
-    sign = ""
-    if signed:
-        sign = "+" if x >= 0 else "-"
-    elif x < 0:
-        sign = "-"
-    return f"{sign}${abs(x):,.0f}"
+    sign = ("+" if x >= 0 else "-") if signed else ("-" if x < 0 else "")
+    dec = 2 if cents else 0
+    return f"{sign}${abs(x):,.{dec}f}"
 
 
-def fmt_pct(x, signed=False):
-    """One-decimal percent string. Pass x as a percentage already (e.g. 12.5)."""
+def fmt_pct(x, signed=False, decimals=1):
+    """Percent string; pass x already as a percentage (e.g. 12.5)."""
     x = float(x)
     sign = "+" if (signed and x >= 0) else ("-" if x < 0 else "")
-    return f"{sign}{abs(x):.1f}%"
+    return f"{sign}{abs(x):.{decimals}f}%"
+
+
+def fmt_pp(x, signed=True):
+    """Percentage-point string, e.g. '+1.6 pp' / '-21.5 pp'."""
+    x = float(x)
+    sign = "+" if (signed and x >= 0) else ("-" if x < 0 else "")
+    return f"{sign}{abs(x):.1f} pp"
 
 
 # --------------------------------------------------------------------------- #
@@ -181,17 +197,30 @@ def floor_zone_avg():
     return z.loc[ZONE_CHEAP, "total_delta"] / z.loc[ZONE_CHEAP, "orders"]
 
 
-def aeroprice_cheap_change():
-    """Aeroprice cheap-fare volume change: Jul-Sep avg -> Oct-Dec avg (fraction)."""
-    return _cheap_change(CHANNEL)
-
-
-def _cheap_change(channel):
+def _monthly_cheap(channel):
     m = load_monthly_cheap_by_channel()
-    row = m[m["Channel"] == channel].set_index("month")["orders"]
-    pre = row.reindex([7, 8, 9]).mean()
-    post = row.reindex([10, 11, 12]).mean()
+    return m[m["Channel"] == channel].set_index("month")["orders"]
+
+
+def cheap_volume_change(channel):
+    """Cheap-fare volume change for a channel: Jul-Sep avg -> Oct-Dec avg (fraction)."""
+    row = _monthly_cheap(channel)
+    pre = row.reindex(SUMMER_MONTHS).mean()
+    post = row.reindex(POST_MONTHS).mean()
     return (post - pre) / pre
+
+
+def aeroprice_cheap_change():
+    return cheap_volume_change(CHANNEL)
+
+
+def cheap_share_pooled(months):
+    """Aeroprice's POOLED share of all cheap-fare orders across the given months:
+    (total Aeroprice cheap orders) / (total cheap orders, all channels). Pooled, so
+    high-volume months count for more than low-volume ones (fraction, e.g. 0.726)."""
+    ae = _monthly_cheap(CHANNEL).reindex(months).sum()
+    allc = _monthly_cheap("All channels").reindex(months).sum()
+    return ae / allc
 
 
 # --------------------------------------------------------------------------- #
@@ -203,6 +232,8 @@ EXPECTED = {
     "q4_delta": -1768.0,
     "floor_zone_avg": 6.41,
     "aeroprice_cheap_change": -0.585,
+    "cheap_share_pre_pooled": 0.726,
+    "cheap_share_post_pooled": 0.511,
 }
 
 
@@ -216,6 +247,8 @@ def verify_numbers(tol=0.01):
         "q4_delta": float(q4_delta()),
         "floor_zone_avg": float(floor_zone_avg()),
         "aeroprice_cheap_change": float(aeroprice_cheap_change()),
+        "cheap_share_pre_pooled": float(cheap_share_pooled(PRE_MONTHS)),
+        "cheap_share_post_pooled": float(cheap_share_pooled(POST_MONTHS)),
     }
     drift = []
     for key, exp in EXPECTED.items():
@@ -231,7 +264,7 @@ def drift_banner():
     drift = verify_numbers()
     if drift:
         lines = "\n".join(
-            f"- **{k}**: slides say {v:,.2f}, data now says {a:,.2f}" for k, v, a in drift
+            f"- **{k}**: slides say {v:,.3f}, data now says {a:,.3f}" for k, v, a in drift
         )
         st.warning(
             "Heads up — the numbers below no longer match the validated figures in the "
@@ -240,11 +273,105 @@ def drift_banner():
 
 
 # --------------------------------------------------------------------------- #
-# Shared page furniture
+# One shared Plotly look, registered once and applied to every figure
 # --------------------------------------------------------------------------- #
-def page_setup(title):
-    st.set_page_config(page_title="BudgetAir — Fee Change", page_icon="✈️", layout="wide")
+pio.templates["budgetair"] = go.layout.Template(layout=dict(
+    font=dict(family=CHART_FONT, size=13, color="#374151"),
+    title=dict(font=dict(family=CHART_FONT, size=18, color=COLORS["ink"]),
+               x=0, xanchor="left", y=0.95, yanchor="top"),
+    paper_bgcolor="rgba(0,0,0,0)",
+    plot_bgcolor="rgba(0,0,0,0)",
+    xaxis=dict(showgrid=False, zeroline=False, showline=False, ticks="",
+               title=dict(font=dict(size=12, color=COLORS["muted"])),
+               tickfont=dict(size=12, color=COLORS["muted"])),
+    yaxis=dict(showgrid=True, gridcolor=COLORS["grid"], zeroline=False, showline=False,
+               title=dict(font=dict(size=12, color=COLORS["muted"])),
+               tickfont=dict(size=12, color=COLORS["muted"])),
+    legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="left", x=0,
+                font=dict(size=12, color="#374151")),
+    colorway=[COLORS["brand"], COLORS["more"], COLORS["less"], COLORS["neutral"]],
+    margin=dict(t=78, r=24, b=52, l=64),
+))
+
+# Plotly config: keep the toolbar (PNG download) — the user screenshots charts.
+PLOTLY_CONFIG = {"displayModeBar": True, "displaylogo": False,
+                 "modeBarButtonsToRemove": ["lasso2d", "select2d"]}
+
+
+def style_fig(fig, title, height=440, xgrid=False, ygrid=True):
+    """Apply the shared template so every chart reads as one family."""
+    fig.update_layout(template="budgetair", title=dict(text=title), height=height)
+    fig.update_xaxes(showgrid=xgrid, gridcolor=COLORS["grid"])
+    fig.update_yaxes(showgrid=ygrid, gridcolor=COLORS["grid"])
+    return fig
+
+
+def chart(fig, title, height=440, xgrid=False, ygrid=True):
+    """Style a figure and render it with the standard config."""
+    st.plotly_chart(style_fig(fig, title, height, xgrid, ygrid),
+                    use_container_width=True, config=PLOTLY_CONFIG)
+
+
+# --------------------------------------------------------------------------- #
+# Page furniture: global CSS, sidebar branding, header pattern, KPI cards
+# --------------------------------------------------------------------------- #
+_GLOBAL_CSS = """
+<style>
+  section.main div.block-container {max-width: 1150px; padding-top: 2.2rem;
+        padding-bottom: 3rem;}
+  h1 {letter-spacing: -0.02em; font-weight: 700;}
+  .ba-subtitle {font-size: 1.14rem; line-height: 1.55; color: #6b7280;
+        font-weight: 400; margin: -0.2rem 0 0.2rem 0;}
+  .ba-subtitle strong {color: #374151; font-weight: 600;}
+  hr {margin: 1.25rem 0 1.4rem 0;}
+  /* replace the default page nav with our branded one */
+  [data-testid="stSidebarNav"] {display: none;}
+  [data-testid="stSidebar"] .ba-brand {font-weight: 700; font-size: 1.02rem;
+        color: #1B6CB0; margin-bottom: 0.1rem;}
+  div[data-testid="stMetric"] {padding: 0.1rem 0.1rem;}
+  /* let KPI labels wrap instead of truncating with an ellipsis */
+  [data-testid="stMetricLabel"], [data-testid="stMetricLabel"] * {
+        white-space: normal !important; overflow: visible !important;
+        text-overflow: clip !important;}
+</style>
+"""
+
+_NAV = [
+    ("app.py", "Overview", "🏠"),
+    ("pages/1_The_Fee_Change.py", "The Fee Change", "🔀"),
+    ("pages/2_Overall_Impact.py", "Overall Impact", "💵"),
+    ("pages/3_Winners_and_Losers.py", "Winners & Losers", "⚖️"),
+    ("pages/4_What_Happened.py", "What Happened", "📉"),
+    ("pages/5_Direct_Opportunity.py", "Direct Opportunity", "🎯"),
+]
+
+
+def page_setup(nav_title, icon="✈️"):
+    st.set_page_config(page_title=f"{nav_title} · BudgetAir", page_icon=icon, layout="wide")
+    st.markdown(_GLOBAL_CSS, unsafe_allow_html=True)
+    with st.sidebar:
+        st.markdown('<div class="ba-brand">BudgetAir · Fee Change Analysis</div>',
+                    unsafe_allow_html=True)
+        st.caption("2022 orders · Aeroprice contract change Oct 1")
+        st.divider()
+        for path, label, ic in _NAV:
+            st.page_link(path, label=label, icon=ic)
     drift_banner()
+
+
+def header(title, subtitle):
+    """Finding-style H1 + a muted one-sentence takeaway + a divider."""
+    st.title(title)
+    s = subtitle.replace("$", "&#36;")                       # keep $ literal in HTML
+    s = re.sub(r"\*\*(.+?)\*\*", r"<strong>\1</strong>", s)  # honour **bold**
+    st.markdown(f'<p class="ba-subtitle">{s}</p>', unsafe_allow_html=True)
+    st.divider()
+
+
+def kpi(col, label, value, delta=None, delta_color="normal", help=None):
+    """One KPI rendered as a bordered card in the given column."""
+    with col.container(border=True):
+        st.metric(label, value, delta=delta, delta_color=delta_color, help=help)
 
 
 def md(text):
@@ -254,7 +381,3 @@ def md(text):
 
 def caption(text):
     st.caption(text.replace("$", "\\$"))
-
-
-# Plotly config: keep the toolbar (PNG download) — the user screenshots charts.
-PLOTLY_CONFIG = {"displayModeBar": True, "displaylogo": False}

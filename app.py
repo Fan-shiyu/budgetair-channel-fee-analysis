@@ -3,33 +3,35 @@ import streamlit as st
 
 import utils as u
 
-u.page_setup("Home")
+u.page_setup("Overview", "🏠")
 
-st.title("What the new Aeroprice fee really cost us")
-u.md(
-    "**On the orders we actually sold in 2022, the partner's 'cheaper' new fee "
-    f"would have cost us {u.fmt_usd(u.full_year_delta(), signed=True)} more — "
-    "because a brand-new $10.50 minimum fee landed on the cheap tickets that make "
-    "up most of the channel.**"
+cheap_share = u.load_zone_summary().set_index("zone_plain").loc["Pays more", "share_pct"]
+ae_change = u.aeroprice_cheap_change() * 100
+control_change = u.cheap_volume_change(u.CONTROL_CHANNEL) * 100
+min_fee = u.NEW_SCHEME["floor"]
+
+u.header(
+    "What the new Aeroprice fee really cost us",
+    "On the orders we actually sold in 2022, the partner's 'cheaper' new fee would have "
+    f"cost us **{u.fmt_usd(u.full_year_delta(), signed=True)} more** — because a brand-new "
+    f"${min_fee:,.2f} minimum fee landed on the cheap tickets that make up most of the channel.",
 )
 
 # --- Headline KPI cards (always the full validated figures, computed) --------
-cheap_share = u.load_zone_summary().set_index("zone_plain").loc["Pays more", "share_pct"]
-ae_change = u.aeroprice_cheap_change() * 100
-control_change = u._cheap_change(u.CONTROL_CHANNEL) * 100
-min_fee = u.NEW_SCHEME["floor"]
-
 c1, c2, c3, c4 = st.columns(4)
-c1.metric("Extra cost, full year", u.fmt_usd(u.full_year_delta(), signed=True),
-          help="New fee minus old fee, applied to every 2022 Aeroprice order — same orders, both price schemes.")
-c2.metric("Orders that now pay more", u.fmt_pct(cheap_share),
-          help="Share of Aeroprice orders whose fee went up under the new terms.")
-c3.metric("Cheap-fare orders lost", u.fmt_pct(ae_change, signed=True),
-          delta=f"vs {u.fmt_pct(control_change, signed=True)} on a channel with no fee change",
-          delta_color="off",
-          help="Change in Aeroprice cheap-ticket volume from summer to the last quarter of 2022.")
-c4.metric("Saved per order moved to Direct", f"${min_fee:,.2f}",
-          help="Every cheap order we sell on our own Direct site avoids at least the new $10.50 minimum partner fee.")
+u.kpi(c1, "Extra cost, full year", u.fmt_usd(u.full_year_delta(), signed=True),
+      help="New fee minus old fee, applied to every 2022 Aeroprice order — same orders, both price schemes.")
+u.kpi(c2, "Orders that pay more under new terms", u.fmt_pct(cheap_share),
+      help="Share of Aeroprice orders whose fee went up under the new terms.")
+u.kpi(c3, "Cheap-fare volume after the change", u.fmt_pct(ae_change, decimals=0),
+      help="Change in Aeroprice cheap-ticket volume, summer vs the last quarter of 2022.")
+u.kpi(c4, "Saved per order moved to Direct", f"${min_fee:,.2f}",
+      help="Every cheap order we sell on our own Direct site avoids at least the new $10.50 minimum partner fee.")
+
+u.caption(
+    f"Cheap-fare volume fell {u.fmt_pct(ae_change)} at Aeroprice — vs just {u.fmt_pct(control_change)} "
+    "on a comparable channel with no fee change, so this was the fee, not the season."
+)
 
 st.divider()
 
@@ -53,12 +55,12 @@ u.md(
 
 st.divider()
 
-# --- Page links -------------------------------------------------------------
+# --- Page links (same wording + icons as the sidebar nav) -------------------
 st.subheader("Walk through the evidence")
-st.page_link("pages/1_The_Fee_Change.py", label="1 · The fee change — who pays more, who pays less", icon="🔀")
-st.page_link("pages/2_Overall_Impact.py", label="2 · Overall impact — the full-year bill", icon="💵")
-st.page_link("pages/3_Winners_and_Losers.py", label="3 · Winners & losers — by airline, route and price", icon="⚖️")
-st.page_link("pages/4_What_Happened.py", label="4 · What happened after October 1", icon="📉")
-st.page_link("pages/5_Direct_Opportunity.py", label="5 · The Direct opportunity — winning fares back", icon="🎯")
+st.page_link("pages/1_The_Fee_Change.py", label="The Fee Change — who pays more, who pays less", icon="🔀")
+st.page_link("pages/2_Overall_Impact.py", label="Overall Impact — the full-year bill", icon="💵")
+st.page_link("pages/3_Winners_and_Losers.py", label="Winners & Losers — by airline, route and price", icon="⚖️")
+st.page_link("pages/4_What_Happened.py", label="What Happened — after October 1", icon="📉")
+st.page_link("pages/5_Direct_Opportunity.py", label="Direct Opportunity — winning fares back", icon="🎯")
 
 u.caption("Every number on this dashboard is recomputed from the 2022 order data each time the page loads.")

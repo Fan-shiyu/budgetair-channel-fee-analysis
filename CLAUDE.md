@@ -37,7 +37,7 @@ Slides, dashboard and MCP answers MUST reproduce these exactly (from analysis.py
 | Losers (avg fee delta) | Avianca +$6.64, Spirit +$6.46, Frontier +$5.87, LATAM +$5.05; one-way +$3.89; domestic +$5.76 |
 | Winners | Turkish -$2.66, Aer Lingus -$2.48; intl returns -$3.73 |
 | Behavior: cheap-fare (<$262.50) monthly volume Jul-Sep -> Oct-Dec | Aeroprice **-58.5%** vs Google Flights (control, no fee change) **-5.1%** -> ~-53pp attributable |
-| Aeroprice share of all cheap-fare orders | ~75% pre -> ~50% post |
+| Aeroprice share of all cheap-fare orders | 72.6% pre -> 51.1% post (pooled share of all cheap-fare orders) |
 | Direct share of cheap fares vs trend projection | Nov 9.47% vs 9.38 proj; Dec **11.38% vs 9.78 proj** (small, late, positive spillover) |
 | Total cheap-fare orders all channels | ~5,600/mo -> ~3,100/mo: most displaced demand NOT recaptured |
 | Sensitivity: per-passenger fee basis, full-year delta | +$231,170 (worse than per-order) |
