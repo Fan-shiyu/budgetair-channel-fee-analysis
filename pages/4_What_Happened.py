@@ -8,10 +8,6 @@ u.page_setup("What Happened", "📉")
 
 MN = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
 
-m = u.load_monthly_cheap_by_channel()
-ae = m[m["Channel"] == u.CHANNEL].set_index("month")["orders"]
-gf = m[m["Channel"] == u.CONTROL_CHANNEL].set_index("month")["orders"]
-
 ae_change = u.aeroprice_cheap_change() * 100
 gf_change = u.cheap_volume_change(u.CONTROL_CHANNEL) * 100
 share_pre = u.cheap_share_pooled(u.PRE_MONTHS) * 100
@@ -37,22 +33,8 @@ u.kpi(c3, "Aeroprice's share of cheap fares", u.fmt_pct(share_post),
 
 st.divider()
 
-# --- Chart A: cheap-fare volume, indexed to each channel's Jul-Sep AVERAGE ---
-base_ae = ae.reindex(u.SUMMER_MONTHS).mean()
-base_gf = gf.reindex(u.SUMMER_MONTHS).mean()
-months = list(range(6, 13))   # start the x-axis at June
-fig = go.Figure()
-fig.add_trace(go.Scatter(x=[MN[i - 1] for i in months], y=[ae.loc[i] / base_ae * 100 for i in months],
-                         name="Aeroprice (fee changed)", line=dict(color=u.COLORS["more"], width=3),
-                         mode="lines+markers"))
-fig.add_trace(go.Scatter(x=[MN[i - 1] for i in months], y=[gf.loc[i] / base_gf * 100 for i in months],
-                         name="Comparable channel (no fee change)",
-                         line=dict(color=u.COLORS["neutral"], width=2, dash="dash"),
-                         mode="lines+markers"))
-fig.add_vline(x=3.5, line_dash="dot", line_color="#444",
-              annotation_text="new fee starts", annotation_position="top left")
-fig.update_yaxes(title_text="Cheap-fare orders (Jul–Sep average = 100)")
-u.chart(fig, "Cheap-fare orders collapsed in Aeroprice but held steady where the fee didn't change")
+# --- Chart A: cheap-fare volume vs control (shared builder in core.py) -------
+u.show(u.build_channel_trends_fig())
 u.caption("Both lines are set to 100 at their July–September average so you can compare the drop, "
           "not the raw sizes.")
 

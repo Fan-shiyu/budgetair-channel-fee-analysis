@@ -5,3 +5,6 @@ __pycache__/
 venv/
 .DS_Store
 .playwright-mcp/
+.env
+*.env
+eval/scorecard_local.md

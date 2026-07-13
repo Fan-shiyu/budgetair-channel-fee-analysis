@@ -1,21 +1,12 @@
 """Page 5 — The Direct opportunity: winning budget fares back on our own site."""
-import numpy as np
-import plotly.graph_objects as go
 import streamlit as st
 
 import utils as u
 
 u.page_setup("Direct Opportunity", "🎯")
 
-MN = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
-
-ds = u.load_direct_share().sort_values("month")
-# fit a straight-line trend on the pre-change months (1-9) and project 10-12
-pre = ds[ds["month"] <= 9]
-slope, intercept = np.polyfit(pre["month"], pre["share_pct"], 1)
-ds["projected"] = slope * ds["month"] + intercept
-dec_actual = ds.set_index("month").loc[12, "share_pct"]
-dec_proj = ds.set_index("month").loc[12, "projected"]
+# Direct's cheap-share trend fit lives in core (shared with the MCP server)
+_, dec_actual, dec_proj = u.direct_trend()
 
 # displaced cheap-fare orders / month not recaptured = Aeroprice's monthly cheap-fare loss
 ae = u.load_monthly_cheap_by_channel()
@@ -39,18 +30,8 @@ u.kpi(c2, "Cheap orders/month that vanished from Aeroprice", f"{displaced:,}",
 
 st.divider()
 
-# --- Chart: Direct share vs projected trend, gap shaded ----------------------
-xs = [MN[mo - 1] for mo in ds["month"]]
-fig = go.Figure()
-fig.add_trace(go.Scatter(x=xs, y=ds["projected"], name="If the old trend had continued",
-                         line=dict(color=u.COLORS["neutral"], width=2, dash="dash")))
-fig.add_trace(go.Scatter(x=xs, y=ds["share_pct"], name="Direct's actual share",
-                         line=dict(color=u.COLORS["less"], width=3), mode="lines+markers",
-                         fill="tonexty", fillcolor="rgba(46,125,50,0.12)"))
-fig.add_vline(x=8.5, line_dash="dot", line_color="#444",
-              annotation_text="new fee starts", annotation_position="top left")
-fig.update_yaxes(title_text="Direct's share of all cheap-fare orders, %")
-u.chart(fig, "Since the fee change, Direct is winning a bigger slice of budget fares than its trend predicted")
+# --- Chart: Direct share vs projected trend (shared builder in core.py) ------
+u.show(u.build_direct_share_fig())
 
 st.divider()
 

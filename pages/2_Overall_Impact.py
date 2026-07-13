@@ -64,16 +64,5 @@ u.caption(
 
 st.divider()
 
-# --- Chart B: monthly total fee delta bars ----------------------------------
-aem = u.load_aeroprice_monthly().sort_values("month")
-month_names = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
-labels = [month_names[m - 1] for m in aem["month"]]
-colors = [u.COLORS["more"] if d > 0 else u.COLORS["less"] for d in aem["fee_delta"]]
-
-figb = go.Figure(go.Bar(x=labels, y=aem["fee_delta"], marker_color=colors,
-                        text=[u.fmt_usd(v, signed=True) for v in aem["fee_delta"]],
-                        textposition="outside"))
-figb.add_vline(x=8.5, line_dash="dot", line_color="#444",
-               annotation_text="new fee starts", annotation_position="top left")
-figb.update_yaxes(title_text="Extra fee that month, $")
-u.chart(figb, "The extra cost was building all year until cheap fares left in October", height=420)
+# --- Chart B: monthly total fee delta bars (shared builder in core.py) -------
+u.show(u.build_monthly_delta_fig())

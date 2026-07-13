@@ -1,5 +1,4 @@
 """Page 3 — Winners & Losers: who pays more and who pays less."""
-import plotly.graph_objects as go
 import streamlit as st
 
 import utils as u
@@ -29,30 +28,12 @@ u.kpi(c3, "Effective fee on a sub-$100 ticket", u.fmt_pct(eff_new),
 
 st.divider()
 
-# --- Interactive: pick a lens for the bar chart -----------------------------
+# --- Interactive: pick a lens for the bar chart (shared builder in core.py) --
 view = st.selectbox("View by:",
                     ["Airline", "Journey type", "Domestic vs International", "Ticket price zone"])
-
-if view == "Airline":
-    d = u.load_carrier_impact().rename(columns={"carrier": "category", "avg_delta": "value"})
-else:
-    dim = u.load_dimension_impact()
-    d = dim[dim["dimension"] == view].rename(columns={"avg_delta": "value"})
-d = d[["category", "value"]].sort_values("value")
-colors = [u.COLORS["more"] if v > 0 else u.COLORS["less"] for v in d["value"]]
-
-fig = go.Figure(go.Bar(
-    x=d["value"], y=d["category"], orientation="h", marker_color=colors,
-    text=[u.fmt_usd(v, signed=True, cents=True) for v in d["value"]], textposition="outside",
-    cliponaxis=False,
-))
-# headroom on both ends so the outside value labels never clip at the plot edge
-lo, hi = d["value"].min(), d["value"].max()
-pad = max(hi - lo, 1) * 0.18
-fig.update_xaxes(title_text="Change in fee per order, $", range=[min(lo, 0) - pad, hi + pad])
-fig.update_layout(margin=dict(l=150))
-u.chart(fig, f"Average change in fee per order, by {view.lower()} (red = pays more, green = pays less)",
-        height=430 if view != "Airline" else 520, xgrid=True, ygrid=False)
+_DIM = {"Airline": "airline", "Journey type": "journey_type",
+        "Domestic vs International": "domestic_international", "Ticket price zone": "ticket_zone"}
+u.show(u.build_winners_losers_fig(_DIM[view]))
 
 st.divider()
 
