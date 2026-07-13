@@ -1,0 +1,97 @@
+Channel,month,orders
+Aeroprice,1,3442
+Aeroprice,2,1626
+Aeroprice,3,2879
+Aeroprice,4,3196
+Aeroprice,5,3593
+Aeroprice,6,3643
+Aeroprice,7,4200
+Aeroprice,8,4166
+Aeroprice,9,3069
+Aeroprice,10,1779
+Aeroprice,11,1578
+Aeroprice,12,1383
+All channels,1,4381
+All channels,2,2725
+All channels,3,4044
+All channels,4,4327
+All channels,5,4236
+All channels,6,4536
+All channels,7,6316
+All channels,8,5672
+All channels,9,4837
+All channels,10,3373
+All channels,11,3095
+All channels,12,2811
+Direct,1,163
+Direct,2,169
+Direct,3,267
+Direct,4,346
+Direct,5,282
+Direct,6,314
+Direct,7,564
+Direct,8,417
+Direct,9,390
+Direct,10,251
+Direct,11,293
+Direct,12,320
+Google Flights,1,487
+Google Flights,2,666
+Google Flights,3,692
+Google Flights,4,634
+Google Flights,5,253
+Google Flights,6,437
+Google Flights,7,1405
+Google Flights,8,992
+Google Flights,9,1279
+Google Flights,10,1269
+Google Flights,11,1178
+Google Flights,12,1043
+Jetcost,1,43
+Jetcost,2,46
+Jetcost,3,65
+Jetcost,4,43
+Jetcost,5,30
+Jetcost,6,63
+Jetcost,7,68
+Jetcost,8,29
+Jetcost,9,22
+Jetcost,10,13
+Jetcost,11,7
+Jetcost,12,12
+Jetradar,1,155
+Jetradar,2,136
+Jetradar,3,101
+Jetradar,4,66
+Jetradar,5,51
+Jetradar,6,50
+Jetradar,7,46
+Jetradar,8,32
+Jetradar,9,47
+Jetradar,10,32
+Jetradar,11,20
+Jetradar,12,37
+Kayak Group,1,11
+Kayak Group,2,22
+Kayak Group,3,7
+Kayak Group,4,9
+Kayak Group,5,1
+Kayak Group,6,6
+Kayak Group,7,17
+Kayak Group,8,12
+Kayak Group,9,7
+Kayak Group,10,4
+Kayak Group,11,6
+Kayak Group,12,2
+Other,1,80
+Other,2,60
+Other,3,33
+Other,4,33
+Other,5,26
+Other,6,23
+Other,7,16
+Other,8,24
+Other,9,23
+Other,10,25
+Other,11,13
+Other,12,14
