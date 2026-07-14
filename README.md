@@ -131,7 +131,7 @@ Claude will call the tools.
 }
 ```
 
-### Deploy (Google Cloud Run — no cold start)
+### Deploy (Google Cloud Run — scale-to-zero)
 The `Dockerfile` (base `python:3.12-slim`) installs `mcp_server/requirements.txt` (not the
 dashboard stack), adds chromium (kaleido needs it for PNGs), and bakes in only the small data
 files — `.dockerignore` keeps the 30MB order CSV, dashboard code, and dev tooling out of the
@@ -139,16 +139,20 @@ build context. Build from the **repo root** so `--source .` can reach `core.py` 
 `data/outputs/`. With the [gcloud CLI](https://cloud.google.com/sdk) installed and a project
 selected:
 ```
-gcloud run deploy budgetair-mcp \
-  --source . \
-  --region us-central1 \
-  --allow-unauthenticated \
-  --min-instances 1 \          # keeps one warm instance -> no 30-60s cold start
-  --port 8080
+gcloud run deploy budgetair-mcp --source . --region europe-west4 --allow-unauthenticated
 ```
 Cloud Run prints a public HTTPS URL; the MCP endpoint is that URL + `/mcp`. Re-run the eval
 against it: `python eval/golden_eval.py --url https://<your-url>/mcp`, then do the manual
 Claude checklist.
+
+**Cold starts vs cost.** The default above (no `--min-instances` flag) is **scale-to-zero**:
+**€0/month** at this project's traffic — the only cost is a few-second cold start on the first
+request after ~15 idle minutes. For demo days you can keep one instance warm (no cold start,
+~€3–5/month while enabled):
+```
+gcloud run services update budgetair-mcp --region europe-west4 --min-instances 1
+```
+Revert to free scale-to-zero afterwards with `--min-instances 0`.
 
 > Security note: this demo is **public and read-only on fictional case data**. A production
 > deployment would sit behind OAuth with per-user scopes.
