@@ -1,5 +1,8 @@
 # BudgetAir Channel Fee Analysis
 
+[![Streamlit Dashboard](https://img.shields.io/badge/Streamlit_Dashboard-Live-FF4B4B?logo=streamlit&logoColor=white)](https://budgetair-fee-analysis.streamlit.app)
+[![MCP Server](https://img.shields.io/badge/MCP_Server-Live-4285F4?logo=googlecloud&logoColor=white)](https://budgetair-mcp-114618126327.europe-west4.run.app/mcp)
+
 Solution to the Travix Pricing Analyst business case: quantifying the impact of the
 2022-10-01 Aeroprice channel-fee change on BudgetAir.us orders — shipped two ways, an
 interactive **dashboard** and an **MCP server** for AI-powered Q&A.
