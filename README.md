@@ -3,6 +3,12 @@
 Solution to the Travix Pricing Analyst business case: impact analysis of the
 2022-10-01 Aeroprice channel fee change on BudgetAir.us orders.
 
+**▶ Live dashboard: https://budgetair-fee-analysis.streamlit.app**
+
+> _Certified 2026-07-14: QA suite **47/47 passed** against the deployed app
+> (`python qa_dashboard.py https://budgetair-fee-analysis.streamlit.app`;
+> deployed-run screenshots in `qa_screenshots_deployed/`)._
+
 Two deliverables run on top of the analysis: a **Streamlit dashboard** and an **MCP
 server** for AI-powered Q&A. They have **separate, version-pinned environments**.
 

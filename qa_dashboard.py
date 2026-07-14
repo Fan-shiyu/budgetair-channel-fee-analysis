@@ -31,8 +31,15 @@ import utils as u
 VIEWPORT_H = 1000   # base viewport height; long pages are captured taller than this
 
 BASE = sys.argv[1].rstrip("/") if len(sys.argv) > 1 else "http://localhost:8501"
-SHOTS = Path("qa_screenshots")
+IS_REMOTE = not any(h in BASE for h in ("localhost", "127.0.0.1"))
+# Deployed runs write to a separate folder so the committed local screenshots
+# (used for slides) are never overwritten.
+SHOTS = Path("qa_screenshots_deployed" if IS_REMOTE else "qa_screenshots")
 SHOTS.mkdir(exist_ok=True)
+# Timeouts only (never assertion logic): the Streamlit free tier is slower and can
+# cold-start for 30-60s, so give the deployed app generous navigation/render budgets.
+NAV_TIMEOUT = 120_000 if IS_REMOTE else 30_000
+CHART_TIMEOUT = 30_000 if IS_REMOTE else 15_000
 
 # Expected computed values (formatted with the app's own helpers) -------------
 FULL = u.fmt_usd(u.full_year_delta(), signed=True)                       # +$131,696
@@ -73,12 +80,34 @@ def check(cond, msg):
 
 def settle(page):
     """Wait for Streamlit to finish its rerun (the 'Running' status disappears)."""
-    page.wait_for_load_state("networkidle")
+    try:
+        # Streamlit keeps a websocket open, so on the deployed app 'networkidle' may not
+        # fire — tolerate a timeout rather than crash (this is a settle heuristic only).
+        page.wait_for_load_state("networkidle", timeout=10_000)
+    except Exception:
+        pass
     try:
         page.wait_for_selector('[data-testid="stStatusWidget"]', state="detached", timeout=8000)
     except Exception:
         pass
     page.wait_for_timeout(400)
+
+
+def resolve_app_base(page):
+    """Return the URL that serves the app as the TOP-LEVEL document.
+
+    Streamlit Community Cloud wraps the app in an embed iframe (path '/~/+/'); the public
+    URL's main frame is just hosting chrome. Navigating straight to the embed path renders
+    the app top-level (no iframe), which is what the QA drives."""
+    page.goto(BASE, wait_until="domcontentloaded")
+    for _ in range(NAV_TIMEOUT // 2500):
+        if page.locator('[data-testid="stMetric"]').count() > 0:
+            return BASE  # already top-level
+        for fr in page.frames:
+            if "/~/+/" in fr.url:
+                return fr.url.split("/~/+/")[0] + "/~/+"
+        page.wait_for_timeout(2500)
+    return BASE
 
 
 def counts(page):
@@ -101,7 +130,7 @@ def render_ready(page, n_charts):
                 return svg && svg.querySelectorAll('path, rect, .point, .trace').length > 0;
             });
         }""",
-        arg=n_charts, timeout=15000,
+        arg=n_charts, timeout=CHART_TIMEOUT,
     )
 
 
@@ -180,13 +209,28 @@ def run():
     with sync_playwright() as p:
         browser = p.chromium.launch()
         page = browser.new_page(viewport={"width": 1280, "height": 1000})
+        page.set_default_navigation_timeout(NAV_TIMEOUT)
+
+        base = BASE
+        if IS_REMOTE:
+            # Wake the app first: the Streamlit free tier sleeps after inactivity and the
+            # first load can take 30-60s. Resolve the real app URL (Cloud serves it in an
+            # embed frame) and wait generously for the home KPIs — timeouts only.
+            print(f"Waking {BASE} (cold start can take 30-60s)...")
+            base = resolve_app_base(page)
+            if base != BASE:
+                print(f"App is served in an embed frame; driving it directly at {base}")
+            page.goto(f"{base}/", wait_until="domcontentloaded")
+            page.wait_for_selector('[data-testid="stMetric"]', timeout=NAV_TIMEOUT)
+            settle(page)
+            print("App is awake; starting QA.")
 
         for slug, shot, want in PAGES:
             print(f"\n== {shot} ==")
-            page.goto(f"{BASE}/{slug}")
+            page.goto(f"{base}/{slug}")
             settle(page)
             if want["charts"]:
-                page.wait_for_selector(".js-plotly-plot", timeout=15000)
+                page.wait_for_selector(".js-plotly-plot", timeout=CHART_TIMEOUT)
                 page.wait_for_timeout(300)
             c = counts(page)
             check(c["err"] == 0, f"{shot}: no Streamlit exception")
