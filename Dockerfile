@@ -10,8 +10,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 WORKDIR /app
 
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+# MCP server runtime deps only (NOT the dashboard's streamlit stack)
+COPY mcp_server/requirements.txt ./mcp_server/requirements.txt
+RUN pip install --no-cache-dir -r mcp_server/requirements.txt
 
 # code
 COPY core.py ./

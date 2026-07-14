@@ -1,0 +1,41 @@
+# Keep the MCP image build context small. The Dockerfile COPYs only core.py,
+# mcp_server/, and the small prepared data files (impact_summary.csv, app_data/,
+# mcp_data/). Everything below is dashboard code, dev/QA tooling, or raw data the
+# server never reads at request time.
+
+# --- version control / caches ---
+.git
+.gitignore
+**/__pycache__
+*.pyc
+.pytest_cache
+.playwright-mcp
+.venv
+venv
+venv_*
+
+# --- dashboard (not part of the MCP runtime) ---
+app.py
+pages/
+utils.py
+.streamlit/
+qa_screenshots/
+qa_dashboard.py
+
+# --- dev / QA / eval tooling ---
+tests/
+eval/
+requirements-dev.txt
+.env
+*.env
+
+# --- raw + intermediate data the server never reads ---
+data/monthly_orders/
+data/outputs/orders_compiled_enriched.csv
+
+# --- misc ---
+.python-version
+README.md
+CLAUDE.md
+analysis.py
+prepare_app_data.py

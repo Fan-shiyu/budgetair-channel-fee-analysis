@@ -3,8 +3,46 @@
 Solution to the Travix Pricing Analyst business case: impact analysis of the
 2022-10-01 Aeroprice channel fee change on BudgetAir.us orders.
 
-## Quick start
+Two deliverables run on top of the analysis: a **Streamlit dashboard** and an **MCP
+server** for AI-powered Q&A. They have **separate, version-pinned environments**.
+
+## Python version — pin 3.12 everywhere
+Everything is pinned to **Python 3.12** (`.python-version`). This is not optional:
+the pinned `pandas`/`numpy` wheels do not exist for newer Pythons (e.g. 3.14), so a
+platform that silently picks 3.14 fails to install them and the app crashes with
+`ModuleNotFoundError`. On **Streamlit Community Cloud** the Python version is chosen in
+**Advanced settings when you create the app** and **cannot be changed afterward** — set it
+to **3.12** (to fix an existing app, delete and recreate it). The MCP `Dockerfile` pins
+`python:3.12-slim`.
+
+## Repo layout
 ```
+core.py                       # streamlit-free shared logic (constants, loaders, metrics,
+                              #   verify_numbers, Plotly template, chart builders, render_png)
+analysis.py                   # Phase 1-2 pipeline -> data/outputs/*.csv  (do not modify)
+prepare_app_data.py           # big order CSV -> data/outputs/app_data/*.csv  (dashboard)
+prepare_mcp_data.py           # big order CSV -> data/outputs/mcp_data/segments.parquet (MCP)
+app.py, pages/1..5, utils.py  # Streamlit dashboard
+qa_dashboard.py               # dashboard browser QA (Playwright)
+mcp_server/                   # MCP server: data.py envelope.py tools.py server.py + requirements.txt
+tests/test_tools.py           # MCP unit + startup-gate tests (pytest)
+eval/                         # Gemini golden-question eval + scorecard + manual checklist
+Dockerfile, .dockerignore     # MCP server image (Cloud Run)
+requirements.txt              # dashboard runtime
+mcp_server/requirements.txt   # MCP server runtime
+requirements-dev.txt          # QA + eval tooling (local only)
+```
+
+## Three requirements files
+| File | For | Contains |
+|---|---|---|
+| `requirements.txt` | Dashboard runtime | streamlit, pandas, numpy, plotly |
+| `mcp_server/requirements.txt` | MCP server runtime | fastmcp, mcp, pandas, numpy, plotly, kaleido, pyarrow |
+| `requirements-dev.txt` | Local QA + eval only | both runtimes + pytest, playwright, google-genai |
+
+## Quick start (dashboard)
+```
+python --version            # must be 3.12.x
 pip install -r requirements.txt
 python prepare_app_data.py  # reads the big order file once -> small chart-ready CSVs
 streamlit run app.py        # interactive dashboard
@@ -28,7 +66,9 @@ warning banner on every page if the data ever drifts from the validated case fig
   What Happened / Direct Opportunity.
 - `qa_dashboard.py` — Playwright browser QA (screenshots land in `qa_screenshots/`).
 
-**Deploying on Streamlit Community Cloud:** main file is `app.py`; the committed
+**Deploying on Streamlit Community Cloud:** main file is `app.py`; requirements file is
+`requirements.txt`. In **Advanced settings at app creation set Python to 3.12** (see the
+Python-version section above — it can't be changed later). The committed
 `data/outputs/app_data/` files mean the deployed app never needs the 30MB order file.
 
 ## MCP server (Phase 4)
@@ -48,9 +88,8 @@ chart PNG rendered with the same styling as the dashboard.
 
 ### Run it locally
 ```
-pip install -r requirements.txt
-python prepare_app_data.py     # builds data/outputs/app_data/*  (if not already present)
-python prepare_mcp_data.py     # builds data/outputs/mcp_data/segments.parquet (~3.6MB)
+pip install -r mcp_server/requirements.txt     # MCP runtime only (no streamlit)
+python prepare_mcp_data.py                      # builds data/outputs/mcp_data/segments.parquet (~3.6MB)
 
 python -m mcp_server.server --transport http --port 8000     # remote-style (HTTP)
 # or
@@ -59,6 +98,7 @@ python -m mcp_server.server --transport stdio                # Claude Desktop st
 
 ### Test it (three layers)
 ```
+pip install -r requirements-dev.txt    # both runtimes + pytest / playwright / google-genai
 pytest tests/                          # Layer 1 (startup gate) + Layer 2 (unit) — 34 tests
 # Layer 3 — golden-question eval driven by Gemini (needs a running server + a key):
 export GEMINI_API_KEY=...              # or put GEMINI_API_KEY=... in a local .env (gitignored)
@@ -92,9 +132,12 @@ Claude will call the tools.
 ```
 
 ### Deploy (Google Cloud Run — no cold start)
-The `Dockerfile` bakes in the small data files and installs chromium (kaleido needs it for
-PNGs). From the repo root, with the [gcloud CLI](https://cloud.google.com/sdk) installed and
-a project selected:
+The `Dockerfile` (base `python:3.12-slim`) installs `mcp_server/requirements.txt` (not the
+dashboard stack), adds chromium (kaleido needs it for PNGs), and bakes in only the small data
+files — `.dockerignore` keeps the 30MB order CSV, dashboard code, and dev tooling out of the
+build context. Build from the **repo root** so `--source .` can reach `core.py` and
+`data/outputs/`. With the [gcloud CLI](https://cloud.google.com/sdk) installed and a project
+selected:
 ```
 gcloud run deploy budgetair-mcp \
   --source . \
