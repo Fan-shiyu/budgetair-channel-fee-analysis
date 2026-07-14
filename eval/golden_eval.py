@@ -199,7 +199,8 @@ async def main():
 
     client = genai.Client(api_key=os.environ["GEMINI_API_KEY"])
     rows, n_correct, n_fab = [], 0, 0
-    async with Client(args.url) as mcp:
+    # generous per-call timeout: a cold deployed instance renders chart PNGs in ~10s
+    async with Client(args.url, timeout=150) as mcp:
         tools = await mcp.list_tools()
         decls = build_declarations(tools)
         print(f"Connected to {args.url} — {len(tools)} tools; model {args.model}\n")

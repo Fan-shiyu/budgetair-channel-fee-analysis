@@ -78,6 +78,14 @@ Python-version section above — it can't be changed later). The committed
 `data/outputs/app_data/` files mean the deployed app never needs the 30MB order file.
 
 ## MCP server (Phase 4)
+
+**▶ Live MCP endpoint: `https://budgetair-mcp-114618126327.europe-west4.run.app/mcp`**
+
+> _Deployed to Google Cloud Run (europe-west4, scale-to-zero) and certified 2026-07-14:
+> boot `verify_numbers()` gate passed, `get_overview` returns a rendered PNG, and the Gemini
+> golden eval scored **11/12 correct, 0 fabrications** against the live URL
+> (`eval/scorecard_deployed.md`)._
+
 An [MCP](https://modelcontextprotocol.io) server so non-technical stakeholders can ask
 questions about the fee change **in Claude (or Gemini)** and get correct numbers, charts,
 and plain-English explanations. The server owns the facts — nine tools, each answering one
@@ -118,10 +126,17 @@ Claude pass.
 
 ### Connect it to Claude
 
-**A. claude.ai custom connector (remote, recommended).** Deploy the server (below) to get a
-public HTTPS URL, then in claude.ai: **Settings → Connectors → Add custom connector**, paste
-the URL ending in `/mcp`, and enable it. Ask "what did the Aeroprice fee change cost us?" —
-Claude will call the tools.
+**A. claude.ai custom connector (remote, recommended).** The server is already live, so you
+can connect it directly — in claude.ai: **Settings → Connectors → Add custom connector**, give
+it a name (e.g. "BudgetAir"), paste the URL
+
+```
+https://budgetair-mcp-114618126327.europe-west4.run.app/mcp
+```
+
+and click **Add**, then enable it. Now ask Claude "what did the Aeroprice fee change cost us?"
+— it will call the tools and answer with the real numbers and a chart. (To host your own,
+deploy per the steps below and use your Service URL + `/mcp`.)
 
 **B. Claude Desktop (local, stdio).** Add this to `claude_desktop_config.json`
 (Settings → Developer → Edit Config), then restart Claude Desktop:
@@ -145,11 +160,19 @@ build context. Build from the **repo root** so `--source .` can reach `core.py` 
 `data/outputs/`. With the [gcloud CLI](https://cloud.google.com/sdk) installed and a project
 selected:
 ```
-gcloud run deploy budgetair-mcp --source . --region europe-west4 --allow-unauthenticated
+gcloud run deploy budgetair-mcp --source . --region europe-west4 --allow-unauthenticated \
+  --cpu 2 --memory 1Gi
 ```
 Cloud Run prints a public HTTPS URL; the MCP endpoint is that URL + `/mcp`. Re-run the eval
-against it: `python eval/golden_eval.py --url https://<your-url>/mcp`, then do the manual
-Claude checklist.
+against it: `python eval/golden_eval.py --url https://<your-url>/mcp --out eval/scorecard_deployed.md`,
+then do the manual Claude checklist.
+
+**Why `--cpu 2 --memory 1Gi`?** Chart tools render PNGs with kaleido, which drives a headless
+chromium. On the default 1 vCPU / 512 MiB instance chromium and the web-server event loop
+contend for the single core and the request **hangs**; 2 vCPU / 1 GiB renders a chart in ~10s
+(cold) with room to spare. This is instance *sizing*, not `--min-instances` — the service still
+**scales to zero** (€0 idle). If you redeploy with `--source .`, keep these flags (a bare deploy
+resets sizing to the 1-vCPU default and re-breaks PNG rendering).
 
 **Cold starts vs cost.** The default above (no `--min-instances` flag) is **scale-to-zero**:
 **€0/month** at this project's traffic — the only cost is a few-second cold start on the first
