@@ -1,145 +1,134 @@
 # BudgetAir Channel Fee Analysis
 
-Solution to the Travix Pricing Analyst business case: impact analysis of the
-2022-10-01 Aeroprice channel fee change on BudgetAir.us orders.
+Solution to the Travix Pricing Analyst business case: quantifying the impact of the
+2022-10-01 Aeroprice channel-fee change on BudgetAir.us orders — shipped two ways, an
+interactive **dashboard** and an **MCP server** for AI-powered Q&A.
 
-**▶ Live dashboard: https://budgetair-fee-analysis.streamlit.app**
+## Live
 
-> _Certified 2026-07-14: QA suite **47/47 passed** against the deployed app
-> (`python qa_dashboard.py https://budgetair-fee-analysis.streamlit.app`;
-> deployed-run screenshots in `qa_screenshots_deployed/`)._
+| Surface | Link | Certified (2026-07-14) |
+|---|---|---|
+| 📊 Dashboard | **[budgetair-fee-analysis.streamlit.app](https://budgetair-fee-analysis.streamlit.app)** | browser QA **47/47** on the deployed app |
+| 🔌 MCP endpoint | `https://budgetair-mcp-114618126327.europe-west4.run.app/mcp` | Gemini golden eval **11/12, 0 fabrications** |
 
-Two deliverables run on top of the analysis: a **Streamlit dashboard** and an **MCP
-server** for AI-powered Q&A. They have **separate, version-pinned environments**.
+The MCP endpoint is a live [MCP](https://modelcontextprotocol.io) server on Google Cloud Run
+(scale-to-zero). To use it in Claude, add it as a custom connector — see
+[Connect to Claude](#connect-to-claude).
 
-## Python version — pin 3.12 everywhere
-Everything is pinned to **Python 3.12** (`.python-version`). This is not optional:
-the pinned `pandas`/`numpy` wheels do not exist for newer Pythons (e.g. 3.14), so a
-platform that silently picks 3.14 fails to install them and the app crashes with
-`ModuleNotFoundError`. On **Streamlit Community Cloud** the Python version is chosen in
-**Advanced settings when you create the app** and **cannot be changed afterward** — set it
-to **3.12** (to fix an existing app, delete and recreate it). The MCP `Dockerfile` pins
-`python:3.12-slim`.
+## What it does
+
+The fee impact is a **counterfactual**: the old and new fee schemes are both applied to the
+*same* 2022 orders, which isolates the contract effect from seasonality and sales-mix shifts.
+Behavioural effects (did cheap fares leave the channel?) are measured against Google Flights, a
+channel with no fee change. Every number the dashboard and the MCP server show is recomputed
+from the data at runtime — nothing is hardcoded — and a `verify_numbers()` self-check flags any
+drift from the validated case figures. See `CLAUDE.md` for the locked assumptions and numbers.
 
 ## Repo layout
+
 ```
-core.py                       # streamlit-free shared logic (constants, loaders, metrics,
-                              #   verify_numbers, Plotly template, chart builders, render_png)
+core.py                       # streamlit-free shared logic: constants, loaders, metrics,
+                              #   verify_numbers, Plotly template, chart builders, render_png
 analysis.py                   # Phase 1-2 pipeline -> data/outputs/*.csv  (do not modify)
-prepare_app_data.py           # big order CSV -> data/outputs/app_data/*.csv  (dashboard)
-prepare_mcp_data.py           # big order CSV -> data/outputs/mcp_data/segments.parquet (MCP)
+prepare_app_data.py           # big order CSV -> data/outputs/app_data/*.csv   (dashboard)
+prepare_mcp_data.py           # big order CSV -> data/outputs/mcp_data/segments.parquet  (MCP)
 app.py, pages/1..5, utils.py  # Streamlit dashboard
 qa_dashboard.py               # dashboard browser QA (Playwright)
 mcp_server/                   # MCP server: data.py envelope.py tools.py server.py + requirements.txt
 tests/test_tools.py           # MCP unit + startup-gate tests (pytest)
-eval/                         # Gemini golden-question eval + scorecard + manual checklist
+eval/                         # Gemini golden-question eval + scorecards + manual checklist
 Dockerfile, .dockerignore     # MCP server image (Cloud Run)
-requirements.txt              # dashboard runtime
-mcp_server/requirements.txt   # MCP server runtime
-requirements-dev.txt          # QA + eval tooling (local only)
 ```
 
-## Three requirements files
+## Setup — Python 3.12 + three environments
+
+**Pin Python 3.12 everywhere** (`.python-version`). This is not optional: the pinned
+`pandas`/`numpy` wheels don't exist for newer Pythons (e.g. 3.14), so a platform that silently
+picks 3.14 fails to install them and the app crashes with `ModuleNotFoundError`. The dashboard
+and the MCP server have **separate, version-pinned requirements** so neither pulls the other's
+stack:
+
 | File | For | Contains |
 |---|---|---|
 | `requirements.txt` | Dashboard runtime | streamlit, pandas, numpy, plotly |
 | `mcp_server/requirements.txt` | MCP server runtime | fastmcp, mcp, pandas, numpy, plotly, kaleido, pyarrow |
 | `requirements-dev.txt` | Local QA + eval only | both runtimes + pytest, playwright, google-genai |
 
-## Quick start (dashboard)
+The deliverable CSVs already exist in `data/outputs/`; `python analysis.py` rebuilds them from
+the raw monthly files and prints a validation block.
+
+## Dashboard
+
+A 6-page Streamlit app for non-technical managers — every chart title is a plain-English
+finding with the dollar impact, and a `verify_numbers()` banner appears on every page if the
+data ever drifts from the validated figures. Pages: Overview · The Fee Change · Overall Impact ·
+Winners & Losers · What Happened · Direct Opportunity.
+
+Run it:
+
 ```
-python --version            # must be 3.12.x
+python --version                 # 3.12.x
 pip install -r requirements.txt
-python prepare_app_data.py  # reads the big order file once -> small chart-ready CSVs
-streamlit run app.py        # interactive dashboard
+python prepare_app_data.py       # big order CSV -> small chart-ready CSVs in data/outputs/app_data/
+streamlit run app.py
 ```
-The deliverable CSVs already exist in `data/outputs/`. `python analysis.py` rebuilds
-them from the raw monthly files and prints a validation block.
 
-## Dashboard (Phase 3)
-A 6-page Streamlit dashboard for non-technical business managers — every chart title
-is a plain-English finding with the dollar impact, and every number is recomputed from
-the data at runtime (nothing hardcoded). A small `verify_numbers()` self-check shows a
-warning banner on every page if the data ever drifts from the validated case figures.
+**Deploy on Streamlit Community Cloud:** main file `app.py`, requirements `requirements.txt`.
+Set **Python 3.12 in Advanced settings at app creation** (it can't be changed later — to fix an
+existing app, delete and recreate it). The committed `data/outputs/app_data/` files mean the
+deployed app never reads the 30MB order file.
 
-- `prepare_app_data.py` — run once; turns `data/outputs/orders_compiled_enriched.csv`
-  (30MB) into small files in `data/outputs/app_data/`. The app never reads the big file.
-- `core.py` — the streamlit-free shared core: fee constants, cached loaders, headline
-  metrics, `verify_numbers()`, formatters, the Plotly template, and the chart builders.
-  Both the dashboard and the MCP server import from here (one source of truth).
-- `utils.py` — thin Streamlit layer over `core.py` (page furniture, KPI cards, `chart`).
-- `app.py` + `pages/1..5` — Home / The Fee Change / Overall Impact / Winners & Losers /
-  What Happened / Direct Opportunity.
-- `qa_dashboard.py` — Playwright browser QA (screenshots land in `qa_screenshots/`).
+## MCP server
 
-**Deploying on Streamlit Community Cloud:** main file is `app.py`; requirements file is
-`requirements.txt`. In **Advanced settings at app creation set Python to 3.12** (see the
-Python-version section above — it can't be changed later). The committed
-`data/outputs/app_data/` files mean the deployed app never needs the 30MB order file.
+Nine tools, each answering one category of business question with deterministic Python; the
+model only picks a tool and narrates. Every tool returns the same envelope (headline / data
+table / plain-English facts / caveats / meta) plus, where useful, a chart PNG styled like the
+dashboard. On startup the server runs `verify_numbers()` and **refuses to boot** on drifted data.
 
-## MCP server (Phase 4)
-
-**▶ Live MCP endpoint: `https://budgetair-mcp-114618126327.europe-west4.run.app/mcp`**
-
-> _Deployed to Google Cloud Run (europe-west4, scale-to-zero) and certified 2026-07-14:
-> boot `verify_numbers()` gate passed, `get_overview` returns a rendered PNG, and the Gemini
-> golden eval scored **11/12 correct, 0 fabrications** against the live URL
-> (`eval/scorecard_deployed.md`)._
-
-An [MCP](https://modelcontextprotocol.io) server so non-technical stakeholders can ask
-questions about the fee change **in Claude (or Gemini)** and get correct numbers, charts,
-and plain-English explanations. The server owns the facts — nine tools, each answering one
-category of question with deterministic Python — and the model only picks a tool and
-narrates. Every figure is recomputed from the data; nothing is hardcoded. On startup the
-server runs `verify_numbers()` and **refuses to boot** if the data has drifted from the
-validated headline figures.
-
-**The nine tools:** `get_overview`, `get_fee_impact(period)`, `fee_for_ticket(price)`,
-`winners_losers(dimension)`, `channel_trends`, `direct_opportunity(orders?)`,
-`segment_detail(...)`, `get_methodology`, `get_data_catalog`. Every tool returns the same
-envelope (headline / data table / plain-English facts / caveats / meta) and, where useful, a
-chart PNG rendered with the same styling as the dashboard.
+> `get_overview` · `get_fee_impact(period)` · `fee_for_ticket(price)` · `winners_losers(dimension)`
+> · `channel_trends` · `direct_opportunity(orders?)` · `segment_detail(...)` · `get_methodology`
+> · `get_data_catalog`
 
 ### Run it locally
-```
-pip install -r mcp_server/requirements.txt     # MCP runtime only (no streamlit)
-python prepare_mcp_data.py                      # builds data/outputs/mcp_data/segments.parquet (~3.6MB)
 
-python -m mcp_server.server --transport http --port 8000     # remote-style (HTTP)
-# or
-python -m mcp_server.server --transport stdio                # Claude Desktop style
+```
+pip install -r mcp_server/requirements.txt   # MCP runtime only (no streamlit)
+python prepare_mcp_data.py                    # -> data/outputs/mcp_data/segments.parquet (~3.6MB)
+
+python -m mcp_server.server --transport http --port 8000   # remote-style (HTTP)
+python -m mcp_server.server --transport stdio              # Claude Desktop style
 ```
 
 ### Test it (three layers)
-```
-pip install -r requirements-dev.txt    # both runtimes + pytest / playwright / google-genai
-pytest tests/                          # Layer 1 (startup gate) + Layer 2 (unit) — 34 tests
-# Layer 3 — golden-question eval driven by Gemini (needs a running server + a key):
-export GEMINI_API_KEY=...              # or put GEMINI_API_KEY=... in a local .env (gitignored)
-python -m mcp_server.server --transport http --port 8000 &   # in one terminal
-python eval/golden_eval.py                                   # writes eval/scorecard.md
-```
-The eval asks the 12 golden questions through the live tools and **hard-fails on any
-fabricated $/% figure**. Pass bar: 0 fabrications and ≥10/12 correct. See
-`eval/scorecard.md` for the latest run and `eval/manual_claude_checklist.md` for the manual
-Claude pass.
 
-### Connect it to Claude
+```
+pip install -r requirements-dev.txt          # both runtimes + pytest / playwright / google-genai
+pytest tests/                                 # startup-gate + unit tests (34)
+# Golden eval — Gemini drives the tools over the 12 golden questions (needs a running server + key):
+export GEMINI_API_KEY=...                      # or a local .env (gitignored)
+python -m mcp_server.server --transport http --port 8000 &
+python eval/golden_eval.py                     # writes eval/scorecard.md
+```
 
-**A. claude.ai custom connector (remote, recommended).** The server is already live, so you
-can connect it directly — in claude.ai: **Settings → Connectors → Add custom connector**, give
-it a name (e.g. "BudgetAir"), paste the URL
+The eval **hard-fails on any fabricated $/% figure**; pass bar is 0 fabrications and ≥10/12
+correct. Latest deployed run: `eval/scorecard_deployed.md`.
+
+### Connect to Claude
+
+**A — claude.ai custom connector (the live server).** In claude.ai go to
+**Settings → Connectors → Add custom connector**, name it (e.g. "BudgetAir"), paste the URL,
+click **Add**, and enable it:
 
 ```
 https://budgetair-mcp-114618126327.europe-west4.run.app/mcp
 ```
 
-and click **Add**, then enable it. Now ask Claude "what did the Aeroprice fee change cost us?"
-— it will call the tools and answer with the real numbers and a chart. (To host your own,
-deploy per the steps below and use your Service URL + `/mcp`.)
+Then ask *"what did the Aeroprice fee change cost us?"* — Claude calls the tools and answers
+with the real numbers and a chart.
 
-**B. Claude Desktop (local, stdio).** Add this to `claude_desktop_config.json`
+**B — Claude Desktop (local, stdio).** Add this to `claude_desktop_config.json`
 (Settings → Developer → Edit Config), then restart Claude Desktop:
+
 ```json
 {
   "mcpServers": {
@@ -152,54 +141,37 @@ deploy per the steps below and use your Service URL + `/mcp`.)
 }
 ```
 
-### Deploy (Google Cloud Run — scale-to-zero)
-The `Dockerfile` (base `python:3.12-slim`) installs `mcp_server/requirements.txt` (not the
-dashboard stack), adds chromium (kaleido needs it for PNGs), and bakes in only the small data
-files — `.dockerignore` keeps the 30MB order CSV, dashboard code, and dev tooling out of the
-build context. Build from the **repo root** so `--source .` can reach `core.py` and
-`data/outputs/`. With the [gcloud CLI](https://cloud.google.com/sdk) installed and a project
-selected:
+### Deploy to Google Cloud Run
+
+The `Dockerfile` (`python:3.12-slim`) installs `mcp_server/requirements.txt` + chromium (kaleido
+renders chart PNGs), and bakes in only the small data files — `.dockerignore` keeps the 30MB
+CSV, dashboard code, and dev tooling out of the build context. Build from the **repo root** so
+`--source .` can reach `core.py` and `data/outputs/`:
+
 ```
 gcloud run deploy budgetair-mcp --source . --region europe-west4 --allow-unauthenticated \
   --cpu 2 --memory 1Gi
 ```
-Cloud Run prints a public HTTPS URL; the MCP endpoint is that URL + `/mcp`. Re-run the eval
-against it: `python eval/golden_eval.py --url https://<your-url>/mcp --out eval/scorecard_deployed.md`,
-then do the manual Claude checklist.
 
-**Why `--cpu 2 --memory 1Gi`?** Chart tools render PNGs with kaleido, which drives a headless
-chromium. On the default 1 vCPU / 512 MiB instance chromium and the web-server event loop
-contend for the single core and the request **hangs**; 2 vCPU / 1 GiB renders a chart in ~10s
-(cold) with room to spare. This is instance *sizing*, not `--min-instances` — the service still
-**scales to zero** (€0 idle). If you redeploy with `--source .`, keep these flags (a bare deploy
-resets sizing to the 1-vCPU default and re-breaks PNG rendering).
+Cloud Run prints a public HTTPS URL; the MCP endpoint is that URL + `/mcp`. Re-certify against
+it: `python eval/golden_eval.py --url https://<your-url>/mcp --out eval/scorecard_deployed.md`.
 
-**Cold starts vs cost.** The default above (no `--min-instances` flag) is **scale-to-zero**:
-**€0/month** at this project's traffic — the only cost is a few-second cold start on the first
-request after ~15 idle minutes. For demo days you can keep one instance warm (no cold start,
-~€3–5/month while enabled):
-```
-gcloud run services update budgetair-mcp --region europe-west4 --min-instances 1
-```
-Revert to free scale-to-zero afterwards with `--min-instances 0`.
+- **Keep `--cpu 2 --memory 1Gi`.** Chart PNGs need a headless chromium; on the default
+  1 vCPU / 512 MiB it and the web-server event loop fight over one core and the request *hangs*.
+  Two vCPUs render a chart in ~10s cold. This is instance *sizing*, not `--min-instances`, so the
+  service still **scales to zero (€0 idle)**. A bare `--source .` redeploy resets sizing and
+  re-breaks rendering — always pass these flags.
+- **Cost.** Scale-to-zero = €0/month at this traffic; the only cost is a few-second cold start
+  on the first request after ~15 idle minutes. For a demo day, keep one instance warm
+  (~€3–5/month): `gcloud run services update budgetair-mcp --region europe-west4 --min-instances 1`,
+  and revert afterwards with `--min-instances 0`.
 
-> Security note: this demo is **public and read-only on fictional case data**. A production
+> **Security:** this demo is public and read-only on fictional case data. A production
 > deployment would sit behind OAuth with per-user scopes.
 
-### Roadmap — v2 interactive widgets
-A future v2 adds MCP-Apps UI resources (a draggable fee-curve explorer and click-to-drill
-winners bars) rendered client-side. It is purely additive: every v1 tool already returns a
-static chart PNG, so unsupported clients keep working and the golden eval is unaffected.
-
 ## Deliverables
-- `outputs/orders_compiled_enriched.csv` — order-level fact table (compiling process, auditable)
-- `outputs/impact_summary.csv` — month x channel x zone rollup (analysis-ready)
-- `analysis.py` — reproducible pipeline (plain-text readable)
-- Slides (PDF) — in outputs/ once final
-- Bonus: deployed Streamlit dashboard + MCP server for AI-powered Q&A
 
-## Method in one paragraph
-The fee impact is measured by applying both fee schemes to the SAME orders
-(counterfactual), which isolates the contract effect from seasonality and mix
-shifts. Behavioral effects are measured against Google Flights as a control
-channel that had no fee change. See CLAUDE.md for assumptions and validated numbers.
+- `data/outputs/orders_compiled_enriched.csv` — order-level fact table (auditable).
+- `data/outputs/impact_summary.csv` — month × channel × zone rollup (analysis-ready).
+- `analysis.py` — reproducible pipeline; `CLAUDE.md` — locked assumptions + validated numbers.
+- Deployed **dashboard** + **MCP server** for AI-powered Q&A (links at the top).
