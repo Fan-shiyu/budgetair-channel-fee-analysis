@@ -8,3 +8,4 @@ venv/
 .env
 *.env
 eval/scorecard_local.md
+qa_screenshots_deployed/
