@@ -20,7 +20,7 @@ The MCP endpoint is a live [MCP](https://modelcontextprotocol.io) server on Goog
 
 ## Architecture
 
-![Architecture: data pipeline → shared core.py → Streamlit dashboard + FastMCP server → Claude clients → business stakeholders](docs/architecture.png)
+![Architecture: data pipeline → shared core.py → Streamlit dashboard + FastMCP server → Claude clients → business stakeholders](docs/architecture.svg)
 
 A local, reproducible **data pipeline** writes the source-of-truth outputs; a single
 streamlit-free **`core.py`** owns the fee constants, metric logic, chart builders, and the
