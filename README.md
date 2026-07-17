@@ -18,6 +18,15 @@ The MCP endpoint is a live [MCP](https://modelcontextprotocol.io) server on Goog
 (scale-to-zero). To use it in Claude, add it as a custom connector — see
 [Connect to Claude](#connect-to-claude).
 
+## Architecture
+
+![Architecture: data pipeline → shared core.py → Streamlit dashboard + FastMCP server → Claude clients → business stakeholders](docs/architecture.png)
+
+A local, reproducible **data pipeline** writes the source-of-truth outputs; a single
+streamlit-free **`core.py`** owns the fee constants, metric logic, chart builders, and the
+`verify_numbers()` gate; and two **products** — the Streamlit dashboard and the FastMCP server —
+read only from it. AI narrates, deterministic code computes, so numbers can't be hallucinated.
+
 ## What it does
 
 The fee impact is a **counterfactual**: the old and new fee schemes are both applied to the
